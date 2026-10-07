@@ -3,7 +3,7 @@ import type { FormEvent } from 'react';
 import { supabase } from './lib/supabase';
 
 /* ------------------------------------------------------------------ */
-/* Constantes                                                          */
+/* Constantes                                                         */
 /* ------------------------------------------------------------------ */
 
 const TOTAL_STEPS = 3;
@@ -15,7 +15,6 @@ type Country = {
   name: string;
   dial: string;
   group: string;
-  /** true = le 0 initial fait partie du numéro (ex. Côte d'Ivoire) et ne doit PAS être retiré */
   keepZero?: boolean;
 };
 
@@ -63,23 +62,16 @@ const COUNTRIES: Country[] = [
   { code: 'TN', flag: '🇹🇳', name: 'Tunisie', dial: '+216', group: 'Maghreb' },
 ];
 
-// Ordre d'affichage des régions dans la liste déroulante
 const COUNTRY_GROUPS = ['Afrique de l’Ouest', 'Afrique centrale', 'Maghreb', 'Europe'];
-
-// Pays sélectionné par défaut
 const DEFAULT_COUNTRY = 'TG';
 
 type Mode = 'signup' | 'signin';
 type Phase = 'auth' | 'check-email' | 'done';
 
 /* ------------------------------------------------------------------ */
-/* Fonctions utilitaires                                               */
+/* Utilitaires                                                        */
 /* ------------------------------------------------------------------ */
 
-/**
- * "+33" + "06 12 34 56 78" -> "+33612345678"
- * keepZero = true (ex. Côte d'Ivoire) : "+225" + "07 12 34 56 78" -> "+2250712345678"
- */
 function toE164(dial: string, national: string, keepZero = false): string {
   const digits = national.replace(/\D/g, '');
   const cleaned = keepZero ? digits : digits.replace(/^0+/, '');
@@ -96,25 +88,19 @@ function isValidEmail(email: string): boolean {
 
 function translateError(message: string): string {
   const m = message.toLowerCase();
-  if (m.includes('invalid login credentials'))
-    return 'E-mail ou mot de passe incorrect.';
+  if (m.includes('invalid login credentials')) return 'E-mail ou mot de passe incorrect.';
   if (m.includes('already registered') || m.includes('already been registered'))
     return 'Un compte existe déjà avec cet e-mail. Connecte-toi à la place.';
-  if (m.includes('email not confirmed'))
-    return 'Ton e-mail n’est pas encore confirmé. Clique sur le lien reçu par e-mail.';
+  if (m.includes('email not confirmed')) return 'Ton e-mail n’est pas encore confirmé.';
   if (m.includes('rate limit') || m.includes('too many'))
     return 'Trop de tentatives. Attends un instant puis réessaie.';
   if (m.includes('password') && m.includes('characters'))
     return `Le mot de passe doit contenir au moins ${MIN_PASSWORD} caractères.`;
-  if (m.includes('network') || m.includes('fetch'))
-    return 'Pas de connexion. Vérifie ton Internet et réessaie.';
-  if (m.includes('row-level security') || m.includes('permission denied'))
-    return 'Enregistrement du profil refusé. Vérifie les règles RLS de la table livreurs.';
   return 'Une erreur est survenue. Réessaie dans un instant.';
 }
 
 /* ------------------------------------------------------------------ */
-/* Petits composants                                                   */
+/* Composants UI                                                      */
 /* ------------------------------------------------------------------ */
 
 function Spinner() {
@@ -131,19 +117,10 @@ function ProgressHeader({ step }: { step: number }) {
   return (
     <header className="px-5 pt-5">
       <div className="mb-2 flex items-baseline justify-between text-sm">
-        <span className="font-semibold text-slate-900">
-          Étape {step} sur {TOTAL_STEPS}
-        </span>
+        <span className="font-semibold text-slate-900">Étape {step} sur {TOTAL_STEPS}</span>
         <span className="tabular-nums text-slate-500">{percent} %</span>
       </div>
-      <div
-        className="h-2 w-full overflow-hidden rounded-full bg-slate-200"
-        role="progressbar"
-        aria-valuenow={percent}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label="Progression de la candidature"
-      >
+      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
         <div
           className="h-full rounded-full bg-amber-400 transition-[width] duration-500 ease-out"
           style={{ width: `${percent}%` }}
@@ -162,7 +139,7 @@ const primaryBtn =
   'flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-slate-900 text-base font-semibold text-white transition active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500';
 
 /* ------------------------------------------------------------------ */
-/* Composant principal                                                 */
+/* Application                                                        */
 /* ------------------------------------------------------------------ */
 
 export default function App() {
@@ -182,7 +159,6 @@ export default function App() {
   const country = COUNTRIES.find((c) => c.code === countryCode) ?? COUNTRIES[0];
   const phone = toE164(country.dial, national, country.keepZero);
 
-  /* Session existante au chargement (l'utilisateur reste connecté) */
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) {
@@ -202,7 +178,6 @@ export default function App() {
     password.length >= (mode === 'signup' ? MIN_PASSWORD : 1) &&
     (mode === 'signin' || national.replace(/\D/g, '').length >= 8);
 
-  /** Crée ou met à jour la ligne du livreur. Le téléphone n'est envoyé que s'il est fourni. */
   async function saveProfile(userId: string, userEmail: string, userPhone?: string) {
     const row: Record<string, string> = {
       id: userId,
@@ -216,8 +191,6 @@ export default function App() {
       .upsert(row, { onConflict: 'id' });
     if (upsertError) throw upsertError;
   }
-
-  /* ------------------------- Envoi du formulaire ------------------- */
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -243,8 +216,6 @@ export default function App() {
     setLoading(true);
     try {
       if (mode === 'signup') {
-        // Le téléphone est transmis dans les métadonnées : un trigger SQL
-        // le copie dans la table `livreurs` (voir script SQL).
         const { data, error: signUpError } = await supabase.auth.signUp({
           email: cleanEmail,
           password,
@@ -252,12 +223,10 @@ export default function App() {
         });
         if (signUpError) throw signUpError;
 
-        // E-mail déjà utilisé (Supabase renvoie alors une liste d'identités vide)
         if (data.user && data.user.identities && data.user.identities.length === 0) {
           throw new Error('User already registered');
         }
 
-        // Pas de session = confirmation d'e-mail activée dans Supabase
         if (!data.session) {
           setPhase('check-email');
           return;
@@ -273,7 +242,6 @@ export default function App() {
         });
         if (signInError) throw signInError;
 
-        // Garantit l'existence de la ligne (sans écraser le téléphone existant)
         await saveProfile(data.user.id, cleanEmail);
         setSessionEmail(cleanEmail);
         setPhase('done');
@@ -293,14 +261,11 @@ export default function App() {
     setMode('signin');
   };
 
-  /* ----------------------------- Rendu ----------------------------- */
-
   return (
     <div className="mx-auto flex min-h-[100dvh] w-full max-w-md flex-col bg-stone-50 text-slate-900">
       <ProgressHeader step={1} />
 
       <main className="flex flex-1 flex-col px-5 pb-8 pt-8">
-        {/* ---------------- Inscription / Connexion ---------------- */}
         {phase === 'auth' && (
           <form className="flex flex-1 flex-col" onSubmit={handleSubmit} noValidate>
             <h1 className="text-2xl font-bold leading-tight tracking-tight">
@@ -312,14 +277,11 @@ export default function App() {
                 : 'Connecte-toi pour reprendre ta candidature.'}
             </p>
 
-            {/* Bascule inscription / connexion */}
-            <div className="mt-6 grid grid-cols-2 rounded-xl bg-slate-200 p-1 text-sm font-semibold" role="tablist">
+            <div className="mt-6 grid grid-cols-2 rounded-xl bg-slate-200 p-1 text-sm font-semibold">
               {(['signup', 'signin'] as const).map((m) => (
                 <button
                   key={m}
                   type="button"
-                  role="tab"
-                  aria-selected={mode === m}
                   onClick={() => switchMode(m)}
                   disabled={loading}
                   className={`h-10 rounded-lg transition ${
@@ -331,7 +293,6 @@ export default function App() {
               ))}
             </div>
 
-            {/* E-mail */}
             <label htmlFor="email" className={`mt-6 ${labelCls}`}>
               Adresse e-mail
             </label>
@@ -340,8 +301,6 @@ export default function App() {
                 id="email"
                 type="email"
                 inputMode="email"
-                autoComplete="email"
-                autoCapitalize="none"
                 placeholder="prenom.nom@exemple.fr"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -350,7 +309,6 @@ export default function App() {
               />
             </div>
 
-            {/* Mot de passe */}
             <label htmlFor="password" className={`mt-5 ${labelCls}`}>
               Mot de passe
             </label>
@@ -358,7 +316,6 @@ export default function App() {
               <input
                 id="password"
                 type={showPassword ? 'text' : 'password'}
-                autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                 placeholder={mode === 'signup' ? `${MIN_PASSWORD} caractères minimum` : 'Ton mot de passe'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -369,19 +326,106 @@ export default function App() {
                 type="button"
                 onClick={() => setShowPassword((s) => !s)}
                 className="px-4 text-sm font-semibold text-slate-600"
-                aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}
               >
                 {showPassword ? 'Masquer' : 'Afficher'}
               </button>
             </div>
 
-            {/* Téléphone (inscription uniquement) */}
             {mode === 'signup' && (
               <>
                 <label htmlFor="phone" className={`mt-5 ${labelCls}`}>
                   Téléphone (appel ou WhatsApp)
                 </label>
                 <div className={fieldWrap}>
-                  <div className="relative flex shrink-0 items-center gap-1.5 border-r border-slate-200 bg-slate-50 pl-3 pr-2 focus-within:bg-amber-50">
-                    {/* Affichage compact : drapeau + indicatif */}
-                    <span
+                  <div className="relative flex shrink-0 items-center gap-1.5 border-r border-slate-200 bg-slate-50 pl-3 pr-2">
+                    <span className="text-sm font-medium text-slate-700">
+                      {country.flag} {country.dial}
+                    </span>
+                    <select
+                      value={countryCode}
+                      onChange={(e) => setCountryCode(e.target.value)}
+                      disabled={loading}
+                      className="absolute inset-0 cursor-pointer opacity-0"
+                    >
+                      {COUNTRY_GROUPS.map((grp) => (
+                        <optgroup key={grp} label={grp}>
+                          {COUNTRIES.filter((c) => c.group === grp).map((c) => (
+                            <option key={c.code} value={c.code}>
+                              {c.flag} {c.name} ({c.dial})
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  </div>
+                  <input
+                    id="phone"
+                    type="tel"
+                    inputMode="numeric"
+                    placeholder="07 12 34 56 78"
+                    value={national}
+                    onChange={(e) => setNational(e.target.value)}
+                    disabled={loading}
+                    className={fieldInput}
+                  />
+                </div>
+              </>
+            )}
+
+            {error && (
+              <div className="mt-4 rounded-xl bg-red-50 p-3 text-sm font-medium text-red-600">
+                {error}
+              </div>
+            )}
+
+            <div className="mt-auto pt-6">
+              <button type="submit" disabled={!canSubmit || loading} className={primaryBtn}>
+                {loading ? (
+                  <Spinner />
+                ) : mode === 'signup' ? (
+                  'Continuer vers l’étape 2'
+                ) : (
+                  'Se connecter'
+                )}
+              </button>
+            </div>
+          </form>
+        )}
+
+        {phase === 'check-email' && (
+          <div className="flex flex-1 flex-col items-center justify-center text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-2xl">
+              ✉️
+            </div>
+            <h2 className="mt-4 text-xl font-bold">Vérifie ta boîte mail</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              Un lien de confirmation a été envoyé à <strong>{email}</strong>.
+            </p>
+            <button
+              type="button"
+              onClick={() => setPhase('auth')}
+              className="mt-6 text-sm font-semibold text-slate-900 underline"
+            >
+              Retour à l'accueil
+            </button>
+          </div>
+        )}
+
+        {phase === 'done' && (
+          <div className="flex flex-1 flex-col justify-between">
+            <div className="rounded-2xl bg-emerald-50 p-4 text-emerald-800">
+              <p className="font-semibold">✅ Étape 1 terminée !</p>
+              <p className="mt-1 text-sm">
+                Connecté en tant que <strong>{sessionEmail}</strong>.
+              </p>
+            </div>
+
+            <button type="button" onClick={handleSignOut} className={primaryBtn}>
+              Se déconnecter
+            </button>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
